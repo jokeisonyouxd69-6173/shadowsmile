@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "prepare": "husky"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",
@@ -22,6 +23,9 @@
   "devDependencies": {
     "@types/node": "20.19.39",
     "@types/react": "18.3.28",
+    "husky": "^9.1.7",
+    "init": "^0.1.2",
+    "npx": "^10.2.2",
     "typescript": "5.9.3"
   }
 }

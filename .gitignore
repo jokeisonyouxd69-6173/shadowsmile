@@ -1,8 +1,24 @@
-.vercel
+# dependencies
 node_modules
+
+# next.js build output
 .next
-.env
-.env.local
+out
 dist
 build
-.env.local.save
+
+# vercel
+.vercel
+
+# environment files (IMPORTANT)
+.env
+.env.*
+!.env.example
+
+# local junk files
+.DS_Store
+*.log
+
+# accidental backups
+*.save
+*.bak
