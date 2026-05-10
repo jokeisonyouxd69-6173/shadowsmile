@@ -1,0 +1,220 @@
+"use client";
+
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "../../lib/supabase";
+
+export default function CreatePage() {
+  const router = useRouter();
+
+  const [user, setUser] = useState<any>(null);
+
+  const [mode, setMode] = useState<"structured" | "normal">("structured");
+
+  const [shadow, setShadow] = useState("");
+  const [smile, setSmile] = useState("");
+  const [text, setText] = useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  /* ================= GET USER ================= */
+
+  React.useEffect(() => {
+    async function getUser() {
+      const { data } = await supabase.auth.getUser();
+      setUser(data?.user || null);
+    }
+
+    getUser();
+  }, []);
+
+  /* ================= CREATE POST ================= */
+
+  async function createPost() {
+    if (!user) {
+      alert("You must be logged in");
+      return;
+    }
+
+    if (mode === "structured" && (!shadow || !smile)) {
+      alert("Fill both Shadow and Smile");
+      return;
+    }
+
+    if (mode === "normal" && !text) {
+      alert("Write something first");
+      return;
+    }
+
+    setLoading(true);
+
+    const payload =
+      mode === "structured"
+        ? {
+            user_id: user.id,
+            post_type: "flip",
+            shadow_text: shadow,
+            smile_text: smile,
+            content: null,
+          }
+        : {
+            user_id: user.id,
+            post_type: "normal",
+            content: text,
+            shadow_text: null,
+            smile_text: null,
+          };
+
+    const { error } = await supabase.from("posts").insert(payload);
+
+    setLoading(false);
+
+    if (error) {
+      console.error(error);
+      alert("Failed to create post");
+      return;
+    }
+
+    // reset fields
+    setShadow("");
+    setSmile("");
+    setText("");
+
+    // go back to feed
+    router.push("/");
+  }
+
+  /* ================= UI ================= */
+
+  return (
+    <main style={styles.page}>
+      <h1 style={styles.title}>Create Post</h1>
+
+      {/* MODE SWITCH */}
+      <div style={styles.toggleRow}>
+        <button
+          onClick={() => setMode("structured")}
+          style={{
+            ...styles.toggleBtn,
+            background: mode === "structured" ? "#7B2FFF" : "#111",
+          }}
+        >
+          Shadow / Smile
+        </button>
+
+        <button
+          onClick={() => setMode("normal")}
+          style={{
+            ...styles.toggleBtn,
+            background: mode === "normal" ? "#39FF88" : "#111",
+            color: mode === "normal" ? "#000" : "#fff",
+          }}
+        >
+          Normal
+        </button>
+      </div>
+
+      {/* INPUTS */}
+      <div style={styles.box}>
+        {mode === "structured" ? (
+          <>
+            <input
+              placeholder="Shadow thought..."
+              value={shadow}
+              onChange={(e) => setShadow(e.target.value)}
+              style={styles.input}
+            />
+
+            <input
+              placeholder="What helped?"
+              value={smile}
+              onChange={(e) => setSmile(e.target.value)}
+              style={styles.input}
+            />
+          </>
+        ) : (
+          <textarea
+            placeholder="What's on your mind?"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            style={styles.textarea}
+          />
+        )}
+
+        {/* BUTTON */}
+        <button onClick={createPost} style={styles.button}>
+          {loading ? "Posting..." : "Post"}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+/* ================= STYLES ================= */
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#0A0A0F",
+    color: "#fff",
+    padding: 20,
+    fontFamily: "system-ui",
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: 800,
+    marginBottom: 20,
+  },
+
+  toggleRow: {
+    display: "flex",
+    gap: 10,
+    marginBottom: 20,
+  },
+
+  toggleBtn: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    border: "1px solid #333",
+    color: "#fff",
+    cursor: "pointer",
+  },
+
+  box: {
+    maxWidth: 500,
+    margin: "0 auto",
+  },
+
+  input: {
+    width: "100%",
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 10,
+    background: "#111",
+    border: "1px solid #222",
+    color: "#fff",
+  },
+
+  textarea: {
+    width: "100%",
+    minHeight: 120,
+    padding: 12,
+    borderRadius: 10,
+    background: "#111",
+    border: "1px solid #222",
+    color: "#fff",
+  },
+
+  button: {
+    width: "100%",
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    background: "linear-gradient(135deg,#7B2FFF,#39FF88)",
+    fontWeight: 800,
+    border: "none",
+    cursor: "pointer",
+  },
+};

@@ -1,19 +1,26 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  Sparkles,
-  Command,
-  ShieldAlert,
   Home,
   Search,
   Plus,
   MessageSquare,
   User,
+  ShieldAlert,
+  Command,
+  Heart,
+  Share2,
+  Sparkles,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
+
+/* ================= TYPES ================= */
 
 type Post = {
   id: string;
@@ -23,21 +30,16 @@ type Post = {
   content: string | null;
   post_type: string;
   created_at: string;
+  like_count?: number;
 };
 
-type Reaction = {
-  id: string;
-  post_id: string;
-  user_id: string | null;
-  type: string;
-};
+/* ================= COMPONENT ================= */
 
 export default function Page() {
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [reactions, setReactions] = useState<Reaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [mode, setMode] = useState<"structured" | "normal">("structured");
@@ -46,94 +48,75 @@ export default function Page() {
   const [smile, setSmile] = useState("");
   const [text, setText] = useState("");
 
-  const [searchActive, setSearchActive] = useState(false);
-  const [activeTab, setActiveTab] = useState("home");
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-
-  // COMMENTS
-  const [openCommentsPost, setOpenCommentsPost] = useState<string | null>(null);
+  const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
+
+  /* ================= USER ================= */
 
   async function loadUser() {
     const { data } = await supabase.auth.getUser();
+
     setUser(data?.user || null);
     setLoading(false);
   }
 
-  async function login() {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-    });
-  }
-
-  async function logout() {
-    await supabase.auth.signOut();
-    setUser(null);
-  }
+  /* ================= POSTS ================= */
 
   async function loadPosts() {
-    const { data, error } = await supabase
+    const { data: postsData, error: postError } = await supabase
       .from("posts")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error(error);
+    if (postError) {
+      console.error("Post error:", postError);
       return;
     }
 
-    setPosts((data as Post[]) || []);
-  }
-
-  async function loadReactions() {
-    const { data, error } = await supabase
+    const { data: reactionsData } = await supabase
       .from("reactions")
-      .select("*");
+      .select("post_id, type");
 
-    if (error) {
-      console.error(error);
-      return;
-    }
+    const formatted = (postsData || []).map((post: any) => {
+      const likes =
+        reactionsData?.filter(
+          (r) => r.post_id === post.id && r.type === "like"
+        ).length || 0;
 
-    setReactions((data as Reaction[]) || []);
+      return {
+        ...post,
+        like_count: likes,
+      };
+    });
+
+    setPosts(formatted);
   }
 
   useEffect(() => {
     loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadUser();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-
-    loadPosts();
-    loadReactions();
-
-    async function createProfileIfNeeded() {
-      const { data } = await supabase.auth.getUser();
-      const currentUser = data?.user;
-
-      if (!currentUser) return;
-
-      const { data: existing } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", currentUser.id)
-        .maybeSingle();
-
-      if (!existing) {
-        await supabase.from("profiles").insert({
-          id: currentUser.id,
-          email: currentUser.email,
-        });
-      }
+    if (user) {
+      loadPosts();
+    } else {
+      setPosts([]);
     }
-
-    createProfileIfNeeded();
   }, [user]);
+
+  /* ================= CREATE POST ================= */
 
   async function createPost() {
     if (!user) {
-      alert("Please login first");
+      router.push("/signin");
       return;
     }
 
@@ -142,16 +125,16 @@ export default function Page() {
         ? {
             user_id: user.id,
             post_type: "flip",
-            shadow_text: shadow.trim(),
-            smile_text: smile.trim(),
+            shadow_text: shadow,
+            smile_text: smile,
             content: null,
           }
         : {
             user_id: user.id,
             post_type: "normal",
+            content: text,
             shadow_text: null,
             smile_text: null,
-            content: text.trim(),
           };
 
     const { error } = await supabase.from("posts").insert(payload);
@@ -165,150 +148,131 @@ export default function Page() {
     setSmile("");
     setText("");
 
-    await loadPosts();
+    loadPosts();
   }
 
-  async function toggleReaction(postId: string, type: string) {
-    const { data } = await supabase.auth.getUser();
-    const currentUser = data?.user;
+  /* ================= LIKE ================= */
 
-    if (!currentUser) {
-      alert("Please login");
+  async function likePost(postId: string) {
+    if (!user) {
+      router.push("/signin");
       return;
     }
 
-    const existingReaction = reactions.find(
-      (r) =>
-        r.post_id === postId &&
-        r.user_id === currentUser.id &&
-        r.type === type
-    );
+    await supabase.from("reactions").insert({
+      post_id: postId,
+      user_id: user.id,
+      type: "like",
+    });
 
-    // instant UI update
-    if (existingReaction) {
-      setReactions((prev) =>
-        prev.filter((r) => r.id !== existingReaction.id)
-      );
-
-      await supabase
-        .from("reactions")
-        .delete()
-        .eq("id", existingReaction.id);
-    } else {
-      const fakeReaction = {
-        id: Math.random().toString(),
-        post_id: postId,
-        user_id: currentUser.id,
-        type,
-      };
-
-      setReactions((prev) => [...prev, fakeReaction]);
-
-      await supabase.from("reactions").insert({
-        post_id: postId,
-        user_id: currentUser.id,
-        type,
-      });
-    }
-
-    await loadReactions();
+    loadPosts();
   }
 
-  async function deletePost(postId: string) {
-    if (!user) return;
+  /* ================= COMMENT ================= */
 
-    const post = posts.find((p) => p.id === postId);
-    if (!post) return;
-
-    if (post.user_id !== user.id) {
-      alert("You can only delete your own posts");
+  async function addComment(postId: string) {
+    if (!user) {
+      router.push("/signin");
       return;
     }
 
-    const { error } = await supabase
-      .from("posts")
-      .delete()
-      .eq("id", postId);
+    if (!commentText.trim()) return;
 
-    if (error) {
-      console.error(error);
-      return;
+    await supabase.from("comments").insert({
+      post_id: postId,
+      user_id: user.id,
+      content: commentText,
+    });
+
+    setCommentText("");
+    setOpenComments(null);
+  }
+
+  /* ================= SHARE ================= */
+
+  async function sharePost(postId: string) {
+    const link = `${window.location.origin}/post/${postId}`;
+
+    try {
+      await navigator.clipboard.writeText(link);
+      alert("Link copied to clipboard");
+    } catch {
+      prompt("Copy this link:", link);
     }
-
-    await loadPosts();
   }
 
-  function go(path: string, tab: string) {
-    setActiveTab(tab);
-    router.push(path);
+  /* ================= SIGN OUT ================= */
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.refresh();
+    window.location.reload();
   }
+
+  /* ================= LOADING ================= */
 
   if (loading) {
-    return <div style={styles.loadingScreen}>Loading ShadowSmile...</div>;
+    return <div style={styles.loading}>Loading ShadowSmile...</div>;
   }
 
-  if (!user) {
-    return (
-      <div style={styles.loginScreen}>
-        <div style={styles.logoRow}>
-          <div style={styles.logoGlow}>
-            <Command size={16} color="#0A0A0F" />
-          </div>
-
-          <h1 style={styles.logoText}>
-            Shadow<span style={{ color: "#39FF88" }}>Smile</span>
-          </h1>
-        </div>
-
-        <p style={styles.loginText}>
-          A space to express what’s heavy — and what helped.
-        </p>
-
-        <button style={styles.primaryButton} onClick={login}>
-          Continue with Google
-        </button>
-      </div>
-    );
-  }
+  /* ================= UI ================= */
 
   return (
     <main style={styles.app}>
+      {/* HEADER */}
       <header style={styles.header}>
-        <div style={styles.logoRow}>
-          <div style={styles.logoGlow}>
-            <Command size={16} color="#0A0A0F" />
+        <div style={styles.left}>
+          <div style={styles.logo}>
+            <Command size={16} />
           </div>
 
-          <h1 style={styles.logoText}>
+          <h1 style={styles.title}>
             Shadow<span style={{ color: "#39FF88" }}>Smile</span>
           </h1>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={styles.right}>
+          {!user ? (
+            <button
+              style={styles.market}
+              onClick={() => router.push("/signin")}
+            >
+              <LogIn size={14} />
+              Sign In
+            </button>
+          ) : (
+            <button
+              style={styles.market}
+              onClick={handleLogout}
+            >
+              <LogOut size={14} />
+              Sign Out
+            </button>
+          )}
+
           <button
+            style={styles.market}
             onClick={() => router.push("/marketplace")}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 999,
-              border: "1px solid rgba(57,255,136,0.4)",
-              background: "rgba(57,255,136,0.08)",
-              color: "#39FF88",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 12,
-            }}
           >
             Marketplace
           </button>
 
-          <button style={styles.iconButton}>
-            <ShieldAlert size={18} color="#EAEAF0" />
+          <button
+            style={styles.market}
+            onClick={() => router.push("/dev")}
+          >
+            Dev
+          </button>
+
+          <button style={styles.shield}>
+            <ShieldAlert size={18} />
           </button>
         </div>
       </header>
 
+      {/* HERO */}
       <section style={styles.hero}>
-        <div style={styles.heroBadge}>
+        <div style={styles.badge}>
           <Sparkles size={12} />
           Platform Core
         </div>
@@ -322,15 +286,23 @@ export default function Page() {
         <p style={styles.heroText}>
           A safe social space for honesty, support, healing, and connection.
         </p>
-      </section>
 
-      <section style={styles.createBox}>
-        <div style={styles.modeButtons}>
+        {!user && (
+          <button
+            style={styles.enterBtn}
+            onClick={() => router.push("/signin")}
+          >
+            Enter the Light
+          </button>
+        )}
+
+        <div style={styles.toggleRow}>
           <button
             onClick={() => setMode("structured")}
             style={{
-              ...styles.modeButton,
-              background: mode === "structured" ? "#7B2FFF" : "transparent",
+              ...styles.toggleBtn,
+              background:
+                mode === "structured" ? "#7B2FFF" : "transparent",
             }}
           >
             Shadow / Smile
@@ -339,452 +311,350 @@ export default function Page() {
           <button
             onClick={() => setMode("normal")}
             style={{
-              ...styles.modeButton,
-              background: mode === "normal" ? "#39FF88" : "transparent",
-              color: mode === "normal" ? "#0A0A0F" : "#EAEAF0",
+              ...styles.toggleBtn,
+              background:
+                mode === "normal" ? "#39FF88" : "transparent",
+              color:
+                mode === "normal"
+                  ? "#0A0A0F"
+                  : "#EAEAF0",
             }}
           >
             Normal
           </button>
         </div>
-
-        {mode === "structured" ? (
-          <>
-            <input
-              placeholder="What's weighing on you?"
-              value={shadow}
-              onChange={(e) => setShadow(e.target.value)}
-              style={styles.input}
-            />
-
-            <input
-              placeholder="What helped?"
-              value={smile}
-              onChange={(e) => setSmile(e.target.value)}
-              style={styles.input}
-            />
-          </>
-        ) : (
-          <textarea
-            placeholder="Write something..."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            style={styles.textarea}
-          />
-        )}
-
-        <button onClick={createPost} style={styles.postButton}>
-          Post
-        </button>
       </section>
 
+      {/* CREATE POST */}
+      {user && (
+        <section style={styles.createBox}>
+          {mode === "structured" ? (
+            <>
+              <input
+                placeholder="Shadow thought..."
+                value={shadow}
+                onChange={(e) => setShadow(e.target.value)}
+                style={styles.input}
+              />
+
+              <input
+                placeholder="What helped?"
+                value={smile}
+                onChange={(e) => setSmile(e.target.value)}
+                style={styles.input}
+              />
+            </>
+          ) : (
+            <textarea
+              placeholder="What's on your mind?"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              style={styles.input}
+            />
+          )}
+
+          <button onClick={createPost} style={styles.postBtn}>
+            Post
+          </button>
+        </section>
+      )}
+
+      {/* FEED */}
       <section style={styles.feed}>
-        {posts.map((post) => {
-          const likes = reactions.filter(
-            (r) => r.post_id === post.id && r.type === "like"
-          ).length;
+        {!user ? (
+          <div style={styles.lockedBox}>
+            <h2>Members Only</h2>
+            <p>Sign in to view Shadows and Smiles.</p>
 
-          const likedByUser = reactions.some(
-            (r) =>
-              r.post_id === post.id &&
-              r.user_id === user.id &&
-              r.type === "like"
-          );
+            <button
+              style={styles.enterBtn}
+              onClick={() => router.push("/signin")}
+            >
+              Sign In
+            </button>
+          </div>
+        ) : (
+          posts.map((p) => (
+            <div
+              key={p.id}
+              style={styles.card}
+              onClick={() => router.push(`/post/${p.id}`)}
+            >
+              <Link
+                href={`/profile/${p.user_id}`}
+                style={styles.profileLink}
+                onClick={(e) => e.stopPropagation()}
+              >
+                View Profile
+              </Link>
 
-          return (
-            <article key={post.id} style={styles.card}>
-              {post.post_type === "flip" ? (
+              {p.post_type === "flip" ? (
                 <>
                   <p>
-                    <strong>Shadow:</strong> {post.shadow_text}
+                    <b>Shadow:</b> {p.shadow_text}
                   </p>
 
-                  <p>
-                    <strong style={{ color: "#39FF88" }}>
-                      Smile:
-                    </strong>{" "}
-                    {post.smile_text || "—"}
+                  <p style={{ color: "#39FF88" }}>
+                    <b>Smile:</b> {p.smile_text}
                   </p>
                 </>
               ) : (
-                <p>{post.content}</p>
+                <p>{p.content}</p>
               )}
 
-              <div style={styles.actionRow}>
-                {/* LIKE */}
+              <div
+                style={styles.actions}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <button
-                  onClick={() => toggleReaction(post.id, "like")}
-                  style={{
-                    ...styles.actionButton,
-                    border: likedByUser
-                      ? "1px solid #39FF88"
-                      : "1px solid #333",
-                    color: likedByUser ? "#39FF88" : "#EAEAF0",
-                    transform: likedByUser
-                      ? "scale(1.05)"
-                      : "scale(1)",
-                    transition: "0.15s",
-                  }}
+                  style={styles.actionBtn}
+                  onClick={() => likePost(p.id)}
                 >
-                  ♥ {likes}
+                  <Heart size={14} /> {p.like_count || 0}
                 </button>
 
-                {/* COMMENT */}
                 <button
-                  style={styles.actionButton}
-                  onClick={() => setOpenCommentsPost(post.id)}
+                  style={styles.actionBtn}
+                  onClick={() =>
+                    setOpenComments(
+                      openComments === p.id ? null : p.id
+                    )
+                  }
                 >
-                  <MessageSquare size={16} />
+                  <MessageSquare size={14} /> Comment
                 </button>
 
-                {/* SHARE */}
                 <button
-                  style={styles.actionButton}
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `${window.location.origin}/post/${post.id}`
-                    );
-
-                    alert("Post link copied!");
-                  }}
+                  style={styles.actionBtn}
+                  onClick={() => sharePost(p.id)}
                 >
-                  ➣
+                  <Share2 size={14} /> Share
                 </button>
               </div>
-            </article>
-          );
-        })}
+
+              {openComments === p.id && (
+                <div style={styles.commentBox}>
+                  <input
+                    value={commentText}
+                    onChange={(e) =>
+                      setCommentText(e.target.value)
+                    }
+                    placeholder="Write comment..."
+                    style={styles.commentInput}
+                  />
+
+                  <button
+                    onClick={() => addComment(p.id)}
+                    style={styles.commentBtn}
+                  >
+                    Send
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </section>
-
-      {/* COMMENTS POPUP */}
-      {openCommentsPost && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <h3 style={{ marginTop: 0 }}>Comments</h3>
-
-            <textarea
-              placeholder="Write a comment..."
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              style={styles.textarea}
-            />
-
-            <p style={{ color: "#777", fontSize: 14 }}>
-              Full comment system coming next.
-            </p>
-
-            <button
-              style={styles.postButton}
-              onClick={() => {
-                setCommentText("");
-                setOpenCommentsPost(null);
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      <nav style={styles.navbar}>
-        <button style={styles.navButton}>
-          <Home size={22} />
-        </button>
-
-        <button style={styles.navButton}>
-          <Search size={22} />
-        </button>
-
-        <button style={styles.plusButton}>
-          <Plus size={24} />
-        </button>
-
-        <button style={styles.navButton}>
-          <MessageSquare size={22} />
-        </button>
-
-        <button style={styles.navButton}>
-          <User size={22} />
-        </button>
-      </nav>
     </main>
   );
 }
 
+/* ================= STYLES ================= */
+
 const styles: Record<string, React.CSSProperties> = {
   app: {
     minHeight: "100vh",
-    background: "#0A0A0F",
+    background: "linear-gradient(180deg,#0A0A0F,#0E0E14)",
     color: "#EAEAF0",
     fontFamily: "system-ui",
     paddingBottom: 120,
   },
 
-  loadingScreen: {
+  loading: {
     minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    background: "#0A0A0F",
-    color: "#EAEAF0",
-    fontFamily: "system-ui",
-  },
-
-  loginScreen: {
-    minHeight: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    background: "#0A0A0F",
-    color: "#EAEAF0",
-    padding: 20,
-    textAlign: "center",
-    fontFamily: "system-ui",
   },
 
   header: {
-    position: "sticky",
-    top: 0,
-    zIndex: 100,
     display: "flex",
     justifyContent: "space-between",
+    padding: 16,
+    borderBottom: "1px solid #222",
     alignItems: "center",
-    padding: "18px 24px",
-    borderBottom: "1px solid #1A1A22",
-    background: "rgba(10,10,15,0.92)",
-    backdropFilter: "blur(14px)",
   },
 
-  logoRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-  },
+  left: { display: "flex", gap: 10, alignItems: "center" },
+  right: { display: "flex", gap: 10, alignItems: "center" },
 
-  logoGlow: {
+  logo: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    background: "linear-gradient(135deg, #7B2FFF 0%, #39FF88 100%)",
-    boxShadow: "0 0 15px rgba(123,47,255,0.45)",
+    background: "linear-gradient(135deg,#7B2FFF,#39FF88)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
   },
 
-  logoText: {
-    margin: 0,
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: 1,
-    color: "#FFFFFF",
+  title: { fontSize: 18, fontWeight: 800 },
+
+  shield: {
+    width: 42,
+    height: 42,
+    borderRadius: "50%",
+    border: "1px solid #333",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
-  loginText: {
-    maxWidth: 420,
-    color: "#888",
-    marginTop: 18,
-    lineHeight: 1.5,
+  market: {
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: "1px solid #39FF88",
+    color: "#39FF88",
+    background: "transparent",
+    display: "flex",
+    gap: 6,
+    alignItems: "center",
   },
 
   hero: {
-    maxWidth: 700,
-    margin: "0 auto",
-    padding: "50px 24px 20px",
+    padding: 20,
     textAlign: "center",
   },
 
-  heroBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "8px 14px",
-    borderRadius: 999,
-    border: "1px solid rgba(123,47,255,0.25)",
-    color: "#7B2FFF",
-    marginBottom: 18,
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-
   heroTitle: {
-    fontSize: 42,
+    fontSize: 34,
     fontWeight: 900,
-    lineHeight: 1.05,
-    marginBottom: 18,
   },
 
   heroText: {
-    color: "rgba(234,234,240,0.65)",
-    lineHeight: 1.6,
+    color: "#aaa",
+    marginTop: 10,
+  },
+
+  badge: {
+    display: "inline-flex",
+    gap: 6,
+    marginBottom: 10,
+    border: "1px solid #333",
+    padding: "4px 10px",
+    borderRadius: 999,
+  },
+
+  enterBtn: {
+    marginTop: 20,
+    padding: "12px 24px",
+    borderRadius: 999,
+    border: "none",
+    background:
+      "linear-gradient(135deg,#7B2FFF,#39FF88)",
+    color: "#fff",
+    fontWeight: 700,
+  },
+
+  lockedBox: {
+    textAlign: "center",
+    padding: 40,
+  },
+
+  profileLink: {
+    color: "#39FF88",
+    textDecoration: "none",
+    fontSize: 12,
+    marginBottom: 10,
+    display: "inline-block",
+  },
+
+  toggleRow: {
+    display: "flex",
+    gap: 10,
+    marginTop: 20,
+  },
+
+  toggleBtn: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    border: "1px solid #333",
   },
 
   createBox: {
-    maxWidth: 650,
-    margin: "20px auto",
+    maxWidth: 600,
+    margin: "0 auto",
     padding: 16,
-  },
-
-  modeButtons: {
-    display: "flex",
-    gap: 10,
-    marginBottom: 16,
-  },
-
-  modeButton: {
-    padding: "10px 16px",
-    borderRadius: 12,
-    border: "1px solid #333",
-    color: "#EAEAF0",
-    cursor: "pointer",
   },
 
   input: {
     width: "100%",
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 14,
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: 10,
+    background: "#111",
     border: "1px solid #222",
-    background: "#14141C",
     color: "#fff",
   },
 
-  textarea: {
+  postBtn: {
     width: "100%",
-    minHeight: 120,
-    padding: 14,
-    borderRadius: 14,
-    border: "1px solid #222",
-    background: "#14141C",
-    color: "#fff",
-  },
-
-  primaryButton: {
-    marginTop: 20,
-    padding: "12px 18px",
+    padding: 12,
     borderRadius: 12,
-    border: "none",
-    background: "#7B2FFF",
-    color: "#fff",
-    cursor: "pointer",
-    fontWeight: 700,
-  },
-
-  postButton: {
-    padding: "12px 18px",
-    borderRadius: 14,
-    border: "none",
-    background: "linear-gradient(135deg, #7B2FFF 0%, #39FF88 100%)",
-    color: "#0A0A0F",
-    cursor: "pointer",
+    background:
+      "linear-gradient(135deg,#7B2FFF,#39FF88)",
     fontWeight: 800,
   },
 
   feed: {
-    maxWidth: 700,
+    maxWidth: 600,
     margin: "0 auto",
-    padding: "0 14px",
+    padding: 16,
   },
 
   card: {
-    background: "rgba(26,26,34,0.7)",
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 20,
+    background: "#111",
+    border: "1px solid #222",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 10,
   },
 
-  actionRow: {
+  actions: {
     display: "flex",
     gap: 10,
-    marginTop: 14,
+    marginTop: 10,
   },
 
-  actionButton: {
-    padding: "9px 14px",
-    borderRadius: 12,
-    border: "1px solid #333",
-    background: "transparent",
-    color: "#EAEAF0",
-    cursor: "pointer",
-  },
-
-  deleteButton: {
-    marginTop: 14,
-    padding: "9px 14px",
-    borderRadius: 12,
-    border: "none",
-    background: "#ff4d4d",
-    color: "#fff",
-    cursor: "pointer",
-  },
-
-  navbar: {
-    position: "fixed",
-    bottom: 18,
-    left: "50%",
-    transform: "translateX(-50%)",
-    width: "calc(100% - 40px)",
-    maxWidth: 520,
-    height: 74,
-    borderRadius: 999,
-    background: "rgba(26,26,34,0.88)",
+  actionBtn: {
     display: "flex",
-    justifyContent: "space-around",
+    gap: 5,
     alignItems: "center",
+    padding: "6px 10px",
+    borderRadius: 8,
+    background: "#1a1a1a",
   },
 
-  navButton: {
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    color: "#EAEAF0",
-  },
-
-  plusButton: {
-    width: 56,
-    height: 56,
-    borderRadius: "50%",
-    border: "none",
-    background: "linear-gradient(135deg, #7B2FFF 0%, #39FF88 100%)",
-    color: "#0A0A0F",
-    cursor: "pointer",
-
+  commentBox: {
     display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-
-    padding: 0,
-    lineHeight: 0,
+    gap: 10,
+    marginTop: 10,
   },
 
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: "50%",
+  commentInput: {
+    flex: 1,
+    padding: 8,
+    borderRadius: 8,
+    background: "#111",
     border: "1px solid #222",
-    background: "transparent",
-    color: "#EAEAF0",
+    color: "#fff",
   },
 
-  modalOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.7)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 999,
-    padding: 20,
-  },
-
-  modal: {
-    width: "100%",
-    maxWidth: 500,
-    background: "#14141C",
-    border: "1px solid #333",
-    borderRadius: 24,
-    padding: 20,
+  commentBtn: {
+    padding: "8px 12px",
+    borderRadius: 8,
+    background: "#39FF88",
+    border: "none",
   },
 };
