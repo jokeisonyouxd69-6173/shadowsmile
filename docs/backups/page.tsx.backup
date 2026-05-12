@@ -19,7 +19,6 @@ import {
 
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
-import BottomNav from "./components/BottomNav";
 
 /* ================= TYPES ================= */
 
@@ -55,23 +54,11 @@ export default function Page() {
   /* ================= USER ================= */
 
   async function loadUser() {
-      try {
-    setLoading(true);
+    const { data } = await supabase.auth.getUser();
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    const currentUser = session?.user ?? null;
-
-    setUser(currentUser);
-  } catch (err) {
-    console.error("Failed loading user:", err);
-    setUser(null);
-  } finally {
+    setUser(data?.user || null);
     setLoading(false);
   }
-}
 
   /* ================= POSTS ================= */
 
@@ -110,14 +97,12 @@ export default function Page() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    }
-  );
+    } = supabase.auth.onAuthStateChange(() => {
+      loadUser();
+    });
 
-  return () => subscription.unsubscribe();
-}, []);
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -233,11 +218,7 @@ useEffect(() => {
   /* ================= LOADING ================= */
 
   if (loading) {
-    return (
-      <div style={styles.loading}>
-        Loading ShadowSmile...
-      </div>
-    );
+    return <div style={styles.loading}>Loading ShadowSmile...</div>;
   }
 
   /* ================= UI ================= */
@@ -480,7 +461,6 @@ useEffect(() => {
           ))
         )}
       </section>
-
     </main>
   );
 }

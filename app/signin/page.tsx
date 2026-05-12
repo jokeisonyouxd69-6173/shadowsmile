@@ -1,46 +1,111 @@
 "use client";
 
-import React, { useState } from "react";
+import React, {
+  useEffect,
+  useState,
+} from "react";
+
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function SignInPage() {
   const router = useRouter();
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] =
+    useState<"signin" | "signup">("signin");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [handle, setHandle] = useState("");
+  const [email, setEmail] =
+    useState("");
+  const [password, setPassword] =
+    useState("");
+  const [handle, setHandle] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    async function checkUser() {
+      const {
+        data: { session },
+      } =
+        await supabase.auth.getSession();
+
+      if (session) {
+        router.push("/");
+      }
+    }
+
+    checkUser();
+  }, [router]);
+
+  // Google Sign In
+  async function signInWithGoogle() {
+    const { error } =
+      await supabase.auth.signInWithOAuth(
+        {
+          provider: "google",
+          options: {
+            redirectTo:
+              "http://localhost:3000",
+          },
+        }
+      );
+
+    if (error) {
+      alert(error.message);
+    }
+  }
 
   async function submit() {
     try {
       setLoading(true);
 
+      // Signup validation
+      if (
+        mode === "signup" &&
+        !/^[a-zA-Z0-9_]{3,20}$/.test(
+          handle
+        )
+      ) {
+        alert(
+          "Handle must be 3–20 characters and only use letters, numbers, or underscores."
+        );
+        return;
+      }
+
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              handle,
+        const { error } =
+          await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                handle,
+              },
             },
-          },
-        });
+          });
 
         if (error) {
           alert(error.message);
           return;
         }
 
-        alert("Account created. Check your email if confirmation is enabled.");
+        alert(
+          "Account created! Sign in to continue."
+        );
+
+        setMode("signin");
+        setPassword("");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } =
+          await supabase.auth.signInWithPassword(
+            {
+              email,
+              password,
+            }
+          );
 
         if (error) {
           alert(error.message);
@@ -51,7 +116,9 @@ export default function SignInPage() {
       }
     } catch (err) {
       console.error(err);
-      alert("Something went wrong.");
+      alert(
+        "Something went wrong."
+      );
     } finally {
       setLoading(false);
     }
@@ -59,12 +126,15 @@ export default function SignInPage() {
 
   return (
     <main className="relative min-h-screen w-full flex items-center justify-center bg-[#050505] overflow-hidden">
+
       {/* Background */}
       <div
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-90"
         style={{
-          backgroundImage: "url('/Shadowsmile.png')",
-          filter: "brightness(0.8) contrast(1.1)",
+          backgroundImage:
+            "url('/Shadowsmile.png')",
+          filter:
+            "brightness(0.8) contrast(1.1)",
         }}
       >
         <div className="absolute inset-0 bg-black/20" />
@@ -72,20 +142,27 @@ export default function SignInPage() {
 
       {/* Card */}
       <div className="relative z-10 w-full max-w-[400px] p-10 bg-black/40 backdrop-blur-2xl border border-white/10 rounded-3xl">
+
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white">
-            Shadow <span className="text-emerald-400">Smile</span>
+            Shadow{" "}
+            <span className="text-emerald-400">
+              Smile
+            </span>
           </h1>
 
           <p className="text-gray-400 text-sm mt-3 italic">
-            Express the Shadow. Share the Smile.
+            Express the Shadow.
+            Share the Smile.
           </p>
         </div>
 
         {/* Mode Toggle */}
         <div className="flex gap-2 mb-5">
           <button
-            onClick={() => setMode("signin")}
+            onClick={() =>
+              setMode("signin")
+            }
             className={`flex-1 py-2 rounded-xl transition ${
               mode === "signin"
                 ? "bg-emerald-400 text-black font-bold"
@@ -96,7 +173,9 @@ export default function SignInPage() {
           </button>
 
           <button
-            onClick={() => setMode("signup")}
+            onClick={() =>
+              setMode("signup")
+            }
             className={`flex-1 py-2 rounded-xl transition ${
               mode === "signup"
                 ? "bg-emerald-400 text-black font-bold"
@@ -110,42 +189,129 @@ export default function SignInPage() {
         {/* Handle for signup */}
         {mode === "signup" && (
           <input
-            placeholder="Choose a handle"
+            id="handle"
+            name="handle"
+            autoComplete="username"
+            placeholder="Choose a username"
             value={handle}
-            onChange={(e) => setHandle(e.target.value)}
+            onChange={(e) =>
+              setHandle(
+                e.target.value
+              )
+            }
             className="w-full p-3 rounded-xl bg-white/10 border border-white/10 text-white mb-3 outline-none"
           />
         )}
 
         {/* Email */}
         <input
+          id="email"
+          name="email"
+          autoComplete="email"
           placeholder="Email"
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) =>
+            setEmail(
+              e.target.value
+            )
+          }
           className="w-full p-3 rounded-xl bg-white/10 border border-white/10 text-white mb-3 outline-none"
         />
 
         {/* Password */}
         <input
+          id="password"
+          name="password"
+          autoComplete={
+            mode === "signin"
+              ? "current-password"
+              : "new-password"
+          }
           placeholder="Password"
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-3 rounded-xl bg-white/10 border border-white/10 text-white mb-5 outline-none"
+          onChange={(e) =>
+            setPassword(
+              e.target.value
+            )
+          }
+          className="w-full p-3 rounded-xl bg-white/10 border border-white/10 text-white mb-2 outline-none"
         />
+
+        {/* Forgot Password */}
+        <div className="flex justify-end mb-4">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!email) {
+                alert(
+                  "Enter your email first."
+                );
+                return;
+              }
+
+              const { error } =
+                await supabase.auth.resetPasswordForEmail(
+                  email,
+                  {
+                    redirectTo:
+                      "http://localhost:3000/reset-password",
+                  }
+                );
+
+              if (error) {
+                alert(
+                  error.message
+                );
+              } else {
+                alert(
+                  "Password reset email sent."
+                );
+              }
+            }}
+            className="text-sm text-emerald-400 hover:underline"
+          >
+            Forgot Password?
+          </button>
+        </div>
 
         {/* Submit */}
         <button
           onClick={submit}
-          disabled={loading}
-          className="w-full py-3 bg-white text-black font-bold rounded-xl hover:opacity-90 transition"
+          disabled={
+            loading ||
+            !email ||
+            !password ||
+            (mode === "signup" &&
+              !handle)
+          }
+          className="w-full py-3 bg-white text-black font-bold rounded-xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading
             ? "Loading..."
             : mode === "signin"
             ? "Enter the Light"
             : "Create Account"}
+        </button>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-5">
+          <div className="h-px bg-white/10 flex-1" />
+          <span className="text-gray-400 text-sm">
+            or
+          </span>
+          <div className="h-px bg-white/10 flex-1" />
+        </div>
+
+        {/* Google Button */}
+        <button
+          onClick={
+            signInWithGoogle
+          }
+          className="w-full py-3 bg-emerald-500 text-black font-bold rounded-xl hover:opacity-90 transition"
+        >
+          Continue with Google
         </button>
       </div>
     </main>
