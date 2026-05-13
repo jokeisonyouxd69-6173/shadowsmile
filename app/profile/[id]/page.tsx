@@ -198,7 +198,7 @@ async function saveProfile() {
     setSaving(true);
 
 let avatarUrl =
-  profile?.avatar_Url || null;
+  profile?.avatar_url || null;
 
 if (avatarFile) {
   const fileExt =
@@ -250,7 +250,7 @@ if (avatarFile) {
           bio:
             editBio.trim(),
 
-          avatar_Url:
+          avatar_url:
             avatarUrl,
         })
         .eq(
@@ -276,7 +276,7 @@ if (avatarFile) {
             bio:
               editBio.trim(),
 
-            avatar_Url:
+            avatar_url:
               avatarUrl,
           }
         : prev
@@ -344,9 +344,9 @@ const profileBio =
       {/* PROFILE CARD */}
       <section style={styles.profileCard}>
   <div style={styles.avatar}>
-  {profile?.avatar_Url ? (
+  {profile?.avatar_url ? (
     <Image
-      src={profile.avatar_Url}
+      src={profile.avatar_url}
       alt="avatar"
       fill
       style={styles.avatarImage}
