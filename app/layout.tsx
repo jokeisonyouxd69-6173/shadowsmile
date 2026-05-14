@@ -1,6 +1,6 @@
 import "./globals.css";
 import Providers from "./providers";
-import BottomNav from "./components/BottomNav";
+import LayoutShell from "./components/LayoutShell";
 
 export const dynamic = "force-dynamic";
 
@@ -21,16 +21,10 @@ export default function RootLayout({
         }}
       >
         <Providers>
-          <main
-            style={{
-              paddingBottom: "90px",
-            }}
-          >
-            {children}
-          </main>
-
-          <BottomNav />
-        </Providers>
+  <LayoutShell>
+    {children}
+  </LayoutShell>
+</Providers>
       </body>
     </html>
   );

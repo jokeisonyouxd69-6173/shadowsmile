@@ -76,8 +76,10 @@ export default function SignInPage() {
       }
 
       if (mode === "signup") {
-        const { error } =
-          await supabase.auth.signUp({
+        const {
+          data,
+          error,
+        } = await supabase.auth.signUp({
             email,
             password,
             options: {
@@ -91,6 +93,28 @@ export default function SignInPage() {
           alert(error.message);
           return;
         }
+
+        if (data.user) {
+          const { error: profileError } =
+            await supabase
+              .from("profiles")
+              .insert({
+                id: data.user.id,
+                handle: handle.trim(),
+                display_name:
+                  handle.trim(),
+                bio: "",
+                role: "user",
+              });
+
+          if (profileError) {
+            console.error(profileError);
+            alert(
+              "Account created, but profile setup failed."
+            );
+          }
+        }
+
 
         alert(
           "Account created! Sign in to continue."
