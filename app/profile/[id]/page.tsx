@@ -15,6 +15,9 @@
   import { supabase }
     from "../../../lib/supabase";
 
+import { User }
+  from "@supabase/supabase-js";
+
   import {
     Heart,
     MessageSquare,
@@ -51,7 +54,7 @@ export default function ProfilePage() {
 
   const router = useRouter();
 
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,7 +210,7 @@ if (avatarFile) {
       .pop();
 
   const fileName =
-    `${profile.id}-${Date.now()}.${fileExt}`;
+    `${profile.id}/avatar-${Date.now()}.${fileExt}`;
 
   const { error: uploadError } =
     await supabase.storage
@@ -282,7 +285,11 @@ if (avatarFile) {
         : prev
     );
 
+    setAvatarFile(null);
     setEditing(false);
+
+    alert("Profile updated!");
+
   } finally {
     setSaving(false);
   }
@@ -346,11 +353,13 @@ const profileBio =
   <div style={styles.avatar}>
   {profile?.avatar_url ? (
     <Image
-      src={profile.avatar_url}
-      alt="avatar"
-      fill
-      style={styles.avatarImage}
-    />
+  src={profile.avatar_url}
+  alt="avatar"
+  fill
+  unoptimized
+  priority
+  style={styles.avatarImage}
+/>
   ) : (
     displayHandle
       .charAt(1)
@@ -407,6 +416,22 @@ const profileBio =
       />
     </label>
 
+    {avatarFile && (
+      <img
+        src={URL.createObjectURL(
+          avatarFile
+        )}
+        alt="preview"
+        style={{
+          width: 90,
+          height: 90,
+          borderRadius: "50%",
+          objectFit: "cover",
+          margin: "0 auto",
+        }}
+      />
+    )}
+
     <input
       value={editName}
       onChange={(e) =>
@@ -440,6 +465,8 @@ const profileBio =
           setEditBio(
             profile?.bio || ""
           );
+
+          setAvatarFile(null);
 
           setEditing(false);
         }}
@@ -495,15 +522,26 @@ const profileBio =
           </p>
         ) : (
           posts.map((p) => (
-            <div key={p.id} style={styles.card}>
+            <div
+              key={p.id}
+              style={styles.card}
+              onClick={() =>
+                router.push(`/post/${p.id}`)
+              }
+            >
               {p.post_type === "flip" ? (
                 <>
                   <p>
                     <b>Shadow:</b> {p.shadow_text}
                   </p>
 
-                  <p style={{ color: "#39FF88" }}>
-                    <b>Smile:</b> {p.smile_text}
+                  <p
+                    style={{
+                      color: "#39FF88",
+                    }}
+                  >
+                    <b>Smile:</b>{" "}
+                    {p.smile_text}
                   </p>
                 </>
               ) : (
@@ -511,12 +549,24 @@ const profileBio =
               )}
 
               <div style={styles.actions}>
-                <button style={styles.actionBtn}>
+                <button
+                  style={styles.actionBtn}
+                  onClick={(e) =>
+                    e.stopPropagation()
+                  }
+                >
                   <Heart size={14} />
                 </button>
 
-                <button style={styles.actionBtn}>
-                  <MessageSquare size={14} />
+                <button
+                  style={styles.actionBtn}
+                  onClick={(e) =>
+                    e.stopPropagation()
+                  }
+                >
+                  <MessageSquare
+                    size={14}
+                  />
                 </button>
               </div>
             </div>
@@ -578,6 +628,10 @@ const styles: Record<string, React.CSSProperties> = {
   profileCard: {
     textAlign: "center",
     marginBottom: 24,
+    background: "#111",
+    border: "1px solid #222",
+    borderRadius: 24,
+    padding: 28,
   },
 
   avatar: {
